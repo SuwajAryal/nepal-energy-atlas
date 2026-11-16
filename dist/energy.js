@@ -144,6 +144,20 @@
   timeline.append(tools, chartHost);
   dashboard.append(timeline);
 
+  function downloadData(key, rows, columns, source) {
+    const [label, url] = sources[source];
+    const table = [
+      ["Period", "Date range", ...columns.map(column => series[column] + " (GWh)"), "Source", "Source URL"],
+      ...rows.map(row => [row.label, row.span, ...columns.map(column => row[column]), label, url])
+    ];
+    const csv = table.map(row => row.map(cell => '"' + String(cell).replaceAll('"', '""') + '"').join(",")).join("\r\n");
+    const download = element("a");
+    download.href = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    download.download = "nepal-electricity-" + key + ".csv";
+    download.click();
+    setTimeout(() => URL.revokeObjectURL(download.href), 1000);
+  }
+
   function renderPeriod(key) {
     for (const button of buttons) button.setAttribute("aria-pressed", String(button.dataset.period === key));
     const [rows, source, title, keys] = views[key];
@@ -155,15 +169,41 @@
     const tickStep = Math.ceil(max / 4 / 100) * 100;
     const ceiling = tickStep * 4;
     const chart = element("div", "bar-chart");
-    chart.setAttribute("aria-hidden", "true");
     chart.style.setProperty("--columns", rows.length);
     const axis = element("div", "chart-axis");
+    axis.setAttribute("aria-hidden", "true");
     for (let n = 4; n >= 0; n--) axis.append(element("span", "", format.format(tickStep * n)));
     const plot = element("div", "chart-plot");
+    plot.setAttribute("role", "group");
+    plot.setAttribute("aria-label", "Select a period to inspect its values");
     const labels = element("div", "chart-labels");
+    labels.setAttribute("aria-hidden", "true");
+    const reading = element("div", "chart-reading");
+    reading.setAttribute("aria-live", "polite");
+    let selectedGroup;
+
+    function selectGroup(group, row) {
+      selectedGroup?.setAttribute("aria-pressed", "false");
+      group.setAttribute("aria-pressed", "true");
+      selectedGroup = group;
+      const period = element("div", "reading-title");
+      period.append(element("strong", "", row.label), element("small", "", row.span));
+      const values = element("dl", "reading-values");
+      for (const column of keys) {
+        const item = element("div");
+        item.append(element("dt", "series-" + column, series[column]), element("dd", "", format.format(row[column]) + " GWh"));
+        values.append(item);
+      }
+      reading.replaceChildren(period, values, citation(source));
+    }
+
     for (const row of rows) {
-      const group = element("div", "bar-group");
+      const group = element("button", "bar-group");
+      group.type = "button";
       group.title = row.label + " · " + keys.map(column => series[column] + " " + format.format(row[column]) + " GWh").join(" · ");
+      group.setAttribute("aria-label", group.title);
+      group.setAttribute("aria-pressed", "false");
+      group.addEventListener("click", () => selectGroup(group, row));
       for (const column of keys) {
         const bar = element("span", "bar series-" + column);
         bar.style.height = row[column] / ceiling * 100 + "%";
@@ -171,6 +211,7 @@
       }
       plot.append(group);
       labels.append(element("span", "", key === "monthly" ? row.label.slice(0, 3) : row.label));
+      if (row === (key === "seasonal" ? rows[0] : rows.at(-1))) selectGroup(group, row);
     }
     chart.append(axis, plot, labels);
 
@@ -200,6 +241,11 @@
     table.append(head, body);
     scroll.append(table);
     exact.append(scroll);
+    const utility = element("div", "chart-utility");
+    const download = element("button", "download-data", "Download CSV");
+    download.type = "button";
+    download.addEventListener("click", () => downloadData(key, rows, keys, source));
+    utility.append(download);
     const explanation = element("p", "chart-note");
     if (key === "trade") {
       explanation.textContent = "The fiscal year is labeled by its end year. FY 2025/26 trade figures are provisional.";
@@ -209,7 +255,8 @@
     if (key === "seasonal") {
       explanation.append(document.createTextNode(" Whole Nepali reporting months are grouped by their Gregorian start month to approximate the weather seasons. The monsoon group combines months from both ends of the fiscal year. "), citation("weather"));
     }
-    chartHost.replaceChildren(caption, legend, chart, exact, explanation);
+    const instruction = element("p", "chart-note", "Select a bar group to see its exact values.");
+    chartHost.replaceChildren(caption, legend, instruction, chart, reading, utility, exact, explanation);
   }
   renderPeriod("monthly");
 

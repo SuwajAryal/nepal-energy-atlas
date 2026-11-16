@@ -11,6 +11,10 @@
   const list = get("project-list");
   const detail = get("project-detail");
   const search = get("project-search");
+  const fitResults = get("fit-results");
+  const clearFilters = get("clear-filters");
+  const statusButtons = [...document.querySelectorAll("[data-filter]")];
+  const maxZoom = 16;
   const svgNS = "http://www.w3.org/2000/svg";
   const number = new Intl.NumberFormat("en", { maximumFractionDigits: 3 });
   const statusLabels = { operating: "Operating", development: "In development", other: "Other status" };
@@ -71,6 +75,16 @@
     return [...new Set(values)].join(" · ") || project.area || project.river || "Nepal";
   }
 
+  function searchKey(value) {
+    return value.normalize("NFKD").toLowerCase().replace(/\p{M}/gu, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  }
+
+  function matchScore(project, query) {
+    if (project.searchName === query) return 3;
+    if (project.searchName.startsWith(query)) return 2;
+    return project.searchName.includes(query) ? 1 : 0;
+  }
+
   function summary() {
     const mapped = projects.filter((project) => project.point).length;
     const counts = [[mapped, "Mapped projects"], [projects.length - mapped, "Directory only"]];
@@ -86,10 +100,11 @@
   }
 
   function renderList() {
-    get("result-count").textContent = data ? number.format(matches.length) + " projects" : "";
+    get("result-count").textContent = data ? number.format(matches.length) + (matches.length === 1 ? " project" : " projects") : "";
+    fitResults.disabled = !matches.some((project) => project.point);
     list.replaceChildren();
     if (!matches.length) {
-      list.append(node("p", "empty", data ? "No projects match your search." : "Project records could not be loaded."));
+      list.append(node("p", "empty", data ? "No projects match these filters." : "Project records could not be loaded."));
       return;
     }
     const rows = document.createDocumentFragment();
@@ -104,7 +119,8 @@
       const symbol = node("span", "row-glyph tech-" + project.tech + " " + project.status);
       symbol.append(icon(glyph));
       const location = districts(project);
-      const subtitle = [label, location === "Nepal" ? "" : location, project.point ? "" : "Directory only"].filter(Boolean).join(" · ");
+      const subtitle = [label, location === "Nepal" ? "" : location, project.stage || statusLabels[project.status],
+        project.point ? "" : "Directory only"].filter(Boolean).join(" · ");
       text.append(node("strong", "", project.name), node("small", "", subtitle));
       row.append(symbol, text, node("strong", "capacity", capacity(project)));
       if (project.capacityLabel) row.classList.add("hybrid-row");
@@ -120,15 +136,23 @@
   }
 
   function updateFilters() {
-    const query = search.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const query = searchKey(search.value);
+    const words = query ? query.split(" ") : [];
     matches = projects.filter((project) => (filter === "all" || project.status === filter)
       && (technology.value === "all" || project.tech === technology.value)
-      && query.every((word) => project.searchText.includes(word)));
+      && words.every((word) => project.searchText.includes(word)));
+    if (query) matches.sort((a, b) => matchScore(b, query) - matchScore(a, query));
     if (selection && !matches.includes(selection)) closeDetail(false);
+    clearFilters.hidden = !search.value && filter === "all" && technology.value === "all";
     renderList();
     list.scrollTop = 0;
-    if (geo && !selection) fit();
-    else redraw();
+    redraw();
+  }
+
+  function setStatus(value) {
+    filter = value;
+    for (const button of statusButtons) button.setAttribute("aria-pressed", button.dataset.filter === value);
+    updateFilters();
   }
 
   function closeDetail(restoreFocus) {
@@ -189,6 +213,12 @@
       google.append(icon("external"));
       links.append(google);
     }
+    const permalink = new URL(window.location.href);
+    permalink.searchParams.set("project", project.id);
+    permalink.hash = "project-map";
+    const share = node("a", "source-project", "Project permalink");
+    share.href = permalink.href;
+    links.append(share);
     detail.append(close, status, title, node("p", "", districts(project)), facts, links);
     if (project.ibnConstruction) {
       const confirmation = node("a", "source-project", "Investment Board Nepal report");
@@ -268,8 +298,23 @@
     redraw();
   }
 
+  function fitMatchingProjects() {
+    const points = matches.flatMap((project) => project.point ? [project.point] : []);
+    if (!points.length || !width || !height) return;
+    const xs = points.map(([x]) => x);
+    const ys = points.map(([, y]) => y);
+    const west = Math.min(...xs);
+    const east = Math.max(...xs);
+    const north = Math.min(...ys);
+    const south = Math.max(...ys);
+    center = [(west + east) / 2, (north + south) / 2];
+    zoom = Math.max(1, Math.min(6, width * .78 / ((east - west) * scaleX),
+      height * .68 / ((south - north) * scaleY)));
+    redraw();
+  }
+
   function setZoom(next, x = width / 2, y = height / 2) {
-    const target = Math.max(1, Math.min(16, next));
+    const target = Math.max(1, Math.min(maxZoom, next));
     if (target === zoom) return;
     center[0] += (x - width / 2) / scaleX * (1 / zoom - 1 / target);
     center[1] += (y - height / 2) / scaleY * (1 / zoom - 1 / target);
@@ -295,7 +340,7 @@
     const tx = width / 2 - center[0] * sx;
     const ty = height / 2 - center[1] * sy;
     surface.style.transform = "matrix(" + [sx, 0, 0, sy, tx, ty].join(",") + ")";
-    get("zoom-in").disabled = zoom >= 16;
+    get("zoom-in").disabled = zoom >= maxZoom;
     get("zoom-out").disabled = zoom <= 1;
 
     const cell = zoom < 2 ? 43 : zoom < 6 ? 34 : 22;
@@ -305,7 +350,7 @@
       const x = project.point[0] * sx + tx;
       const y = project.point[1] * sy + ty;
       if (x < -20 || x > width + 20 || y < -20 || y > height + 20) continue;
-      const key = project === selection ? "selected" : zoom >= 16 ? "point-" + project.id
+      const key = project === selection ? "selected" : zoom >= maxZoom ? "point-" + project.id
         : Math.floor(x / cell) + "," + Math.floor(y / cell);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push({ project, x, y });
@@ -359,7 +404,7 @@
     get("reset-map").addEventListener("click", fit);
     get("terrain-toggle").addEventListener("click", () => { terrain = !terrain; setTerrain(); });
     map.addEventListener("wheel", (event) => {
-      if (event.ctrlKey || event.metaKey) return;
+      if (event.ctrlKey || event.metaKey || !map.matches(":focus-within")) return;
       event.preventDefault();
       const rect = map.getBoundingClientRect();
       setZoom(zoom * Math.exp(Math.max(-160, Math.min(160, -event.deltaY)) * .004), event.clientX - rect.left, event.clientY - rect.top);
@@ -367,6 +412,7 @@
     map.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 || event.target.closest("button") || drag) return;
       drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      if (event.pointerType !== "touch") map.focus({ preventScroll: true });
       map.setPointerCapture(event.pointerId);
       map.classList.add("dragging");
     });
@@ -404,7 +450,8 @@
   });
   for (const project of projects) {
     project.tech ??= "hydro";
-    project.searchText = [project.name, project.river, project.area, technologies[project.tech][0]].join(" ").toLowerCase();
+    project.searchName = searchKey(project.name);
+    project.searchText = searchKey([project.name, project.river, project.area, technologies[project.tech][0], project.license].join(" "));
     if (geo && Number.isFinite(project.lon) && Number.isFinite(project.lat)) project.point = projectPoint(project.lon, project.lat);
   }
   projects.sort((a, b) => b.mw - a.mw || a.name.localeCompare(b.name));
@@ -412,13 +459,17 @@
   renderList();
   search.addEventListener("input", updateFilters);
   technology.addEventListener("change", updateFilters);
-  document.querySelectorAll("[data-filter]").forEach((button) => {
-    button.addEventListener("click", () => {
-      document.querySelector('[data-filter="' + filter + '"]').setAttribute("aria-pressed", "false");
-      filter = button.dataset.filter;
-      button.setAttribute("aria-pressed", "true");
-      updateFilters();
-    });
+  for (const button of statusButtons) button.addEventListener("click", () => setStatus(button.dataset.filter));
+  clearFilters.addEventListener("click", () => {
+    search.value = "";
+    technology.value = "all";
+    setStatus("all");
+    search.focus();
+  });
+  fitResults.addEventListener("click", () => {
+    fitMatchingProjects();
+    if (window.matchMedia("(max-width: 740px)").matches) map.scrollIntoView({ block: "start" });
+    map.focus({ preventScroll: true });
   });
   if (geo) {
     drawBasemap();
@@ -428,4 +479,7 @@
     get("map-error").hidden = false;
     document.querySelectorAll(".zoom-controls button, #terrain-toggle").forEach((button) => { button.disabled = true; });
   }
+  const linkedId = new URLSearchParams(window.location.search).get("project");
+  const linkedProject = linkedId && projects.find((project) => project.id === linkedId);
+  if (linkedProject) chooseProject(linkedProject, null, true);
 })();

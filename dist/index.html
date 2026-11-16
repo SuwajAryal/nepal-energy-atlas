@@ -68,12 +68,16 @@
           <button type="button" data-filter="development" aria-pressed="false">In development</button>
           <button type="button" data-filter="other" aria-pressed="false">Other status</button>
         </div>
+        <div class="directory-actions">
+          <button id="fit-results" type="button" disabled>Fit results on map</button>
+          <button id="clear-filters" type="button" hidden>Clear filters</button>
+        </div>
         <div id="project-list" class="project-list"></div>
       </section>
       <footer class="sidebar-footer"><svg><use href="#book"/></svg><button id="directory-sources" type="button">Project data sources</button><a href="#energy">Generation &amp; trade ↓</a></footer>
     </aside>
     <section class="map-panel" aria-label="Nepal energy project map">
-      <div id="map" class="map-viewport" tabindex="0" aria-label="Interactive map. Use arrow keys to pan, plus and minus to zoom, or Home to reset.">
+      <div id="map" class="map-viewport" tabindex="0" aria-label="Interactive map. Select the map to enable scroll zoom. Use arrow keys to pan, plus and minus to zoom, or Home to reset.">
         <div id="map-surface" class="map-surface" aria-hidden="true">
           <svg id="basemap" class="basemap"></svg>
         </div>
@@ -97,7 +101,7 @@
           <h2>Map symbols</h2>
           <div class="legend-types"><span class="tech-hydro"><svg><use href="#hydro"/></svg>Hydro</span><span class="tech-solar"><svg><use href="#sun"/></svg>Solar</span><span class="tech-bioenergy"><svg><use href="#leaf"/></svg>Bioenergy</span></div>
           <div><i class="legend-chip"></i> Operating <i class="legend-chip outline"></i> Licensed</div>
-          <div class="legend-note">Select a numbered group to zoom.</div>
+          <div class="legend-note">Select a group to zoom. Click the map to enable scroll zoom.</div>
         </aside>
         <div class="credits"><a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Mapzen / AWS</a><span>·</span><a href="https://www.geoboundaries.org/api/current/gbOpen/NPL/ADM0/" target="_blank" rel="noopener">geoBoundaries</a></div>
       </div>
@@ -134,6 +138,7 @@
       <p><a href="https://www.nea.org.np/en/detail/annual-report-20252026" target="_blank" rel="noopener">Nepal Electricity Authority · A Year in Review 2025/26 ↗</a> supplies the annual and monthly electricity figures. <a href="https://wecs.gov.np/source/ESR_2024.pdf" target="_blank" rel="noopener">WECS · Energy Sector Synopsis Report 2024 ↗</a> supplies the wider energy balance. Each table links to its relevant source page.</p>
       <h3>Terrain &amp; boundary</h3>
       <p>Shaded relief uses <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Mapzen Terrain Tiles on AWS ↗</a>. The Nepal boundary comes from <a href="https://www.geoboundaries.org/api/current/gbOpen/NPL/ADM0/" target="_blank" rel="noopener">geoBoundaries / Open Data Nepal ↗</a>, 2019 geometry, simplified and styled for display under CC BY 4.0.</p>
+      <p><a href="https://github.com/SuwajAryal/nepal-energy-atlas" target="_blank" rel="noopener">Atlas source on GitHub ↗</a> · <a href="https://github.com/SuwajAryal/nepal-energy-atlas/issues" target="_blank" rel="noopener">Report a correction ↗</a></p>
     </div>
   </dialog>
 </body>

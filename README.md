@@ -15,6 +15,8 @@ python -m http.server 8765 --directory dist
 
 Open [localhost:8765](http://localhost:8765). The map, fonts, and data snapshots are included. Google Maps links open the national terrain view or an approximate project location.
 
+Use **Fit results on map** to frame the current filters. A project card’s permalink opens that record directly. In **Generation & trade**, select a bar group for exact figures or download the current view as CSV with the source URL on each row.
+
 ## Project records
 
 [Hydropower data](dist/projects.js) contains the 15 November 2026 snapshot for plants and construction licences over 1 MW. [Other energy projects](dist/other-projects.js) covers solar, bagasse cogeneration, and selected wind–solar and thermal records. A map marker uses the midpoint of the coordinate range provided by the source. Records without usable coordinates appear in the directory. Construction licence status reflects the regulator’s record. Where available, Investment Board Nepal's reported construction stage is cited separately.
