@@ -142,7 +142,7 @@
       && (technology.value === "all" || project.tech === technology.value)
       && words.every((word) => project.searchText.includes(word)));
     if (query) matches.sort((a, b) => matchScore(b, query) - matchScore(a, query));
-    if (selection && !matches.includes(selection)) closeDetail(false);
+    if (!detail.hidden && (!selection || !matches.includes(selection))) closeDetail(false);
     clearFilters.hidden = !search.value && filter === "all" && technology.value === "all";
     renderList();
     list.scrollTop = 0;
@@ -234,7 +234,49 @@
     if (focusMap && project.point) {
       zoom = Math.max(zoom, 1.8);
       center = [...project.point];
+      if (width > 740) center[0] += 160 / (scaleX * zoom);
     }
+    redraw();
+    detail.focus({ preventScroll: true });
+  }
+
+  function showGroup(group, trigger) {
+    selection = null;
+    selectionTrigger = trigger;
+    list.querySelector("[aria-current]")?.removeAttribute("aria-current");
+    const close = node("button", "icon-button");
+    close.type = "button";
+    close.setAttribute("aria-label", "Close project group");
+    close.append(icon("close"));
+    close.addEventListener("click", () => closeDetail(true));
+    const heading = node("h2", "", number.format(group.length) + " projects");
+    const caption = node("p", "", "Choose a project in this area.");
+    const members = node("div", "group-projects");
+    for (const { project } of group) {
+      const button = node("button", "group-project");
+      button.type = "button";
+      const symbol = node("span", "row-glyph tech-" + project.tech + " " + project.status);
+      symbol.append(icon(technologies[project.tech][1]));
+      const name = node("span");
+      name.append(node("strong", "", project.name), node("small", "", project.stage || statusLabels[project.status]));
+      button.append(symbol, name, node("span", "group-capacity", capacity(project)));
+      button.addEventListener("click", () => chooseProject(project, trigger, true));
+      members.append(button);
+    }
+    const explore = node("button", "group-zoom", "Zoom into this area");
+    explore.type = "button";
+    explore.disabled = zoom >= maxZoom;
+    explore.addEventListener("click", () => {
+      center = [
+        group.reduce((sum, entry) => sum + entry.project.point[0], 0) / group.length,
+        group.reduce((sum, entry) => sum + entry.project.point[1], 0) / group.length
+      ];
+      closeDetail(false);
+      setZoom(zoom * 2);
+      map.focus({ preventScroll: true });
+    });
+    detail.replaceChildren(close, heading, caption, explore, members);
+    detail.hidden = false;
     redraw();
     detail.focus({ preventScroll: true });
   }
@@ -287,8 +329,8 @@
   function resize() {
     width = map.clientWidth;
     height = map.clientHeight;
-    scaleX = width / geo.width;
-    scaleY = Math.min(height / geo.height, scaleX * 1.67);
+    scaleX = Math.min(width / geo.width, height / geo.height);
+    scaleY = scaleX;
     redraw();
   }
 
@@ -343,22 +385,22 @@
     get("zoom-in").disabled = zoom >= maxZoom;
     get("zoom-out").disabled = zoom <= 1;
 
-    const cell = zoom < 2 ? 43 : zoom < 6 ? 34 : 22;
-    const groups = new Map();
+    const radius = zoom < 2 ? 42 : 36;
+    const groups = [];
     for (const project of matches) {
       if (!project.point) continue;
       const x = project.point[0] * sx + tx;
       const y = project.point[1] * sy + ty;
       if (x < -20 || x > width + 20 || y < -20 || y > height + 20) continue;
-      const key = project === selection ? "selected" : zoom >= maxZoom ? "point-" + project.id
-        : Math.floor(x / cell) + "," + Math.floor(y / cell);
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push({ project, x, y });
+      const group = project === selection ? undefined : groups.find(entries =>
+        entries[0].project !== selection && Math.hypot(entries[0].x - x, entries[0].y - y) < radius);
+      if (group) group.push({ project, x, y });
+      else groups.push([{ project, x, y }]);
     }
 
     const previous = document.activeElement?.dataset.marker;
     const pins = document.createDocumentFragment();
-    for (const [key, group] of groups) {
+    for (const group of groups) {
       const { project } = group[0];
       const count = group.length;
       const cluster = count > 1;
@@ -369,18 +411,16 @@
         + (cluster ? " cluster" : " glyph") + (project === selection ? " selected" : ""), cluster ? count : "");
       if (!cluster) marker.append(icon(technologies[project.tech][1]));
       marker.type = "button";
-      marker.dataset.marker = cluster ? "cell-" + key : project.id;
+      marker.dataset.marker = cluster ? "group-" + project.id : project.id;
       const x = group.reduce((sum, entry) => sum + entry.x, 0) / count;
       const y = group.reduce((sum, entry) => sum + entry.y, 0) / count;
       marker.style.left = x + "px";
       marker.style.top = y + "px";
-      marker.title = cluster ? count + " projects · Zoom in" : [project.name, statusLabels[project.status], capacity(project)].join(" · ");
+      marker.title = cluster ? count + " projects · Explore this area" : [project.name, statusLabels[project.status], capacity(project)].join(" · ");
       marker.setAttribute("aria-label", marker.title);
       marker.addEventListener("click", () => {
         if (cluster) {
-          center = [(x - tx) / sx, (y - ty) / sy];
-          setZoom(zoom * 2);
-          map.focus({ preventScroll: true });
+          showGroup(group, marker);
         } else chooseProject(project, marker, false);
       });
       pins.append(marker);
@@ -403,6 +443,11 @@
     get("zoom-out").addEventListener("click", () => setZoom(zoom / 1.55));
     get("reset-map").addEventListener("click", fit);
     get("terrain-toggle").addEventListener("click", () => { terrain = !terrain; setTerrain(); });
+    map.addEventListener("dblclick", (event) => {
+      if (event.target.closest("button")) return;
+      const rect = map.getBoundingClientRect();
+      setZoom(zoom * 2, event.clientX - rect.left, event.clientY - rect.top);
+    });
     map.addEventListener("wheel", (event) => {
       if (event.ctrlKey || event.metaKey || !map.matches(":focus-within")) return;
       event.preventDefault();
