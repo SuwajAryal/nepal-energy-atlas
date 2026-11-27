@@ -5,6 +5,10 @@ Nepal Energy Atlas is an interactive terrain map of energy projects and a dashbo
 - [Hosted preview](https://nepal-hydro-atlas.mixedwand.chatgpt.site/) · owner access
 - [Report a data correction or propose an improvement](https://github.com/SuwajAryal/nepal-energy-atlas/issues)
 
+![Nepal Energy Atlas with terrain, project markers, and the searchable directory](docs/previews/atlas.jpg)
+
+*The included project snapshot displayed in the local atlas.*
+
 ## Run locally
 
 Open [dist/index.html](dist/index.html) in a browser, or serve the static files from the repository root.
